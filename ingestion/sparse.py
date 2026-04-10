@@ -18,7 +18,7 @@ def _tokenize(text: str) -> list[str]:
 
 def _token_index(token: str) -> int:
     """Deterministic mapping: token → [0, VOCAB_SIZE)."""
-    return int(hashlib.md5(token.encode()).hexdigest(), 16) % _VOCAB_SIZE
+    return int(hashlib.md5(token.encode(), usedforsecurity=False).hexdigest(), 16) % _VOCAB_SIZE
 
 
 def sparse_embed(text: str, k1: float = 1.5) -> models.SparseVector:

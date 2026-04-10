@@ -119,7 +119,7 @@ def upsert_chunk(conn, source_id: int, chunk_index: int,
                  chunk_text: str, parent_text: str,
                  dense_vec: list, sparse_vec,
                  qdrant_client) -> None:
-    """Two-phase write: SQLite first (in transaction), then Qdrant."""
+    """Two-phase write: Qdrant upsert first (idempotent), then SQLite commit."""
     from qdrant_client.models import PointStruct
     content_hash = sha256_normalize(chunk_text)
     point_id     = make_point_id(source_id, chunk_index)
@@ -132,7 +132,40 @@ def upsert_chunk(conn, source_id: int, chunk_index: int,
     if existing and existing["content_hash"] == content_hash:
         return  # no change
 
-    # SQLite write + Qdrant upsert in one transaction window
+    # Get source metadata for payload (read before any write)
+    src = conn.execute("SELECT * FROM sources WHERE id=?", [source_id]).fetchone()
+
+    # Determine the sqlite_chunk_id for existing rows (new rows get id after insert)
+    existing_id_row = conn.execute(
+        "SELECT id FROM chunks WHERE source_id=? AND chunk_index=?",
+        [source_id, chunk_index]
+    ).fetchone()
+
+    # 1. Qdrant upsert first (idempotent — can retry on failure)
+    # sqlite_chunk_id is set to existing id if available; updated after SQLite write if new
+    sqlite_chunk_id_placeholder = existing_id_row["id"] if existing_id_row else None
+    qdrant_client.upsert(
+        collection_name=config.QDRANT_COLLECTION,
+        points=[PointStruct(
+            id=point_id,
+            vector={"dense": dense_vec, "sparse": sparse_vec},
+            payload={
+                "source_type":     src["source_type"],
+                "platform":        src["platform"],
+                "category":        src["category"],
+                "title":           src["title"],
+                "date":            src["date"],
+                "source_path":     src["path"],
+                "chunk_index":     chunk_index,
+                "content_hash":    content_hash,
+                "source_id":       source_id,
+                "sqlite_chunk_id": sqlite_chunk_id_placeholder,
+            }
+        )],
+        wait=True,
+    )
+
+    # 2. SQLite commit only after Qdrant succeeds
     with conn:
         conn.execute("""
             INSERT INTO chunks
@@ -148,33 +181,17 @@ def upsert_chunk(conn, source_id: int, chunk_index: int,
         """, [source_id, point_id, chunk_index, chunk_text, parent_text,
               content_hash, config.EMBEDDING_MODEL])
 
-        sqlite_chunk_id = conn.execute(
-            "SELECT id FROM chunks WHERE source_id=? AND chunk_index=?",
-            [source_id, chunk_index]
-        ).fetchone()["id"]
-
-        # Get source metadata for payload
-        src = conn.execute("SELECT * FROM sources WHERE id=?", [source_id]).fetchone()
-
-        qdrant_client.upsert(
-            collection_name=config.QDRANT_COLLECTION,
-            points=[PointStruct(
-                id=point_id,
-                vector={"dense": dense_vec, "sparse": sparse_vec},
-                payload={
-                    "source_type":     src["source_type"],
-                    "platform":        src["platform"],
-                    "category":        src["category"],
-                    "title":           src["title"],
-                    "date":            src["date"],
-                    "source_path":     src["path"],
-                    "chunk_index":     chunk_index,
-                    "content_hash":    content_hash,
-                    "source_id":       source_id,
-                    "sqlite_chunk_id": sqlite_chunk_id,
-                }
-            )]
-        )
+        # If this was a new row, update Qdrant payload with the real sqlite_chunk_id
+        if sqlite_chunk_id_placeholder is None:
+            sqlite_chunk_id = conn.execute(
+                "SELECT id FROM chunks WHERE source_id=? AND chunk_index=?",
+                [source_id, chunk_index]
+            ).fetchone()["id"]
+            qdrant_client.set_payload(
+                collection_name=config.QDRANT_COLLECTION,
+                payload={"sqlite_chunk_id": sqlite_chunk_id},
+                points=[point_id],
+            )
 
 
 def delete_source(conn, source_id: int, qdrant_client) -> None:

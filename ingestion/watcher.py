@@ -75,18 +75,30 @@ def process_approved(conn) -> None:
         "SELECT id, path FROM quarantine WHERE status='approved'"
     ).fetchall()
     for row in rows:
-        log.info(f"Ingesting approved file: {row['path']}")
+        path = row["path"]
+        script = Path(__file__).parent / "ingest_convos.py"
+        log.info(f"Ingesting approved file: {path}")
+        conn.execute(
+            "UPDATE quarantine SET status='ingesting' WHERE id=?", [row["id"]]
+        )
+        conn.commit()
         try:
-            subprocess.Popen(
-                [sys.executable, str(Path(__file__).parent / "ingest_convos.py"), row["path"]],
+            result = subprocess.run(
+                [sys.executable, str(script), str(path)],
+                stdout=subprocess.DEVNULL,
+                stderr=subprocess.DEVNULL,
                 cwd=str(Path(__file__).parent.parent),
             )
-            conn.execute(
-                "UPDATE quarantine SET status='ingesting' WHERE id=?", [row["id"]]
-            )
-            conn.commit()
+            status = "done" if result.returncode == 0 else "failed"
         except Exception as exc:
-            log.error(f"Failed to start ingest: {exc}")
+            log.error(f"Failed to run ingest: {exc}")
+            status = "failed"
+        conn.execute(
+            "UPDATE quarantine SET status=?, ingested_at=? WHERE id=?",
+            (status, now_iso(), row["id"])
+        )
+        conn.commit()
+        log.info(f"Ingestion {status}: {path}")
 
 def main():
     from watchdog.observers import Observer

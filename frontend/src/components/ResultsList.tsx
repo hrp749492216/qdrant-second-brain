@@ -18,6 +18,10 @@ function ResultCard({ result }: { result: SearchResult }) {
           <span style={{ fontWeight: 600, fontSize: 15 }}>{result.title}</span>
           <span style={{ marginLeft: 10, background: color, color: "#fff", borderRadius: 4,
                          padding: "2px 8px", fontSize: 12 }}>{result.platform}</span>
+          {result.source_type && (
+            <span style={{ marginLeft: 6, background: "#dbeafe", color: "#1e40af", borderRadius: 4,
+                           padding: "2px 8px", fontSize: 12 }}>{result.source_type}</span>
+          )}
           {result.category && (
             <span style={{ marginLeft: 6, background: "#e5e7eb", borderRadius: 4,
                            padding: "2px 8px", fontSize: 12 }}>{result.category}</span>
@@ -68,7 +72,7 @@ export function ResultsList({ results, loading, error, searched, onLoadMore, has
 
   return (
     <div>
-      {results.map((r) => <ResultCard key={`${r.source_path}-${r.chunk_text.slice(0, 20)}`} result={r} />)}
+      {results.map((r) => <ResultCard key={`${r.source_path}-${r.source_type}-${r.chunk_text.slice(0, 40)}`} result={r} />)}
       {hasMore && (
         <button onClick={onLoadMore}
           style={{ display: "block", margin: "0 auto", padding: "10px 24px",

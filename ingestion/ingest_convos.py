@@ -109,7 +109,9 @@ def ingest_file(file_path: str, conn, qdrant_client):
         if convo_idx < resume_from:
             continue
         source_path = f"{platform}::{conv.conversation_id}"
-        date_rfc = f"{conv.date}T00:00:00Z" if "T" not in conv.date else conv.date
+        raw_date = conv.date or ""
+        date_rfc = (f"{raw_date}T00:00:00Z" if raw_date and "T" not in raw_date
+                    else raw_date or "1970-01-01T00:00:00Z")
         source_id = get_or_create_source(
             conn, source_path, "conversation",
             platform=platform, title=conv.title, date=date_rfc,

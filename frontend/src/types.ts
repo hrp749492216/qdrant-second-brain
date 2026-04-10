@@ -7,6 +7,7 @@ export interface SearchResult {
   source_path: string;
   chunk_text: string;
   parent_text: string;
+  source_type: string;
 }
 
 export interface SearchFilters {

@@ -2,7 +2,7 @@
 import threading
 from typing import Optional
 from qdrant_client import QdrantClient
-from qdrant_client.models import Filter, FieldCondition, MatchValue, Range, Prefetch, FusionQuery, Fusion
+from qdrant_client.models import Filter, FieldCondition, MatchValue, Range, DatetimeRange, Prefetch, FusionQuery, Fusion
 import config
 from ingestion.embedder import embed_texts
 from ingestion.sparse import sparse_embed
@@ -46,7 +46,7 @@ def build_filter(source_type=None, platform=None, category=None,
     if date_from or date_to:
         conditions.append(FieldCondition(
             key="date",
-            range=Range(gte=date_from, lte=date_to),
+            range=DatetimeRange(gte=date_from, lte=date_to),
         ))
     return Filter(must=conditions) if conditions else None
 
@@ -137,6 +137,7 @@ def search(
             "category":    c["payload"].get("category", ""),
             "date":        c["payload"].get("date", ""),
             "source_path": c["payload"].get("source_path", ""),
+            "source_type": c["payload"].get("source_type", ""),
             "chunk_text":  c["chunk_text"],
             "parent_text": c["parent_text"],
         }
