@@ -1,0 +1,16 @@
+qdrant-client>=1.10.0
+fastembed>=0.3.0
+FlagEmbedding>=1.2.0
+fastapi
+uvicorn[standard]
+watchdog
+pypdf
+python-docx
+nbformat
+transformers>=4.40.0
+sentencepiece
+torch
+numpy
+httpx
+pytest
+pytest-asyncio
