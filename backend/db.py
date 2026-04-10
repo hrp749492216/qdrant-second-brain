@@ -103,13 +103,16 @@ def get_or_create_source(conn, path: str, source_type: str,
                           date: str = "1970-01-01T00:00:00Z",
                           file_hash: str = "",
                           category: str = "") -> int:
-    row = conn.execute("SELECT id FROM sources WHERE path = ?", [path]).fetchone()
-    if row:
-        return row["id"]
     conn.execute(
-        "INSERT INTO sources (path, source_type, platform, title, date, ingested_at, file_hash, category) "
+        "INSERT OR IGNORE INTO sources "
+        "(path, source_type, platform, title, date, ingested_at, file_hash, category) "
         "VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
         [path, source_type, platform, title, date, now_iso(), file_hash, category],
+    )
+    # Always update mutable metadata so re-ingestion refreshes stale records
+    conn.execute(
+        "UPDATE sources SET title=?, date=?, category=? WHERE path=?",
+        [title, date, category, path],
     )
     conn.commit()
     return conn.execute("SELECT id FROM sources WHERE path = ?", [path]).fetchone()["id"]
@@ -201,9 +204,13 @@ def delete_source(conn, source_id: int, qdrant_client) -> None:
                  conn.execute("SELECT qdrant_point_id FROM chunks WHERE source_id=?",
                               [source_id]).fetchall()]
     if point_ids:
+        # Delete from Qdrant first with wait=True for confirmation before touching SQLite
         qdrant_client.delete(
             collection_name=config.QDRANT_COLLECTION,
             points_selector=PointIdsList(points=point_ids),
+            wait=True,
         )
-    conn.execute("DELETE FROM sources WHERE id=?", [source_id])
-    conn.commit()
+    # Only commit SQLite after Qdrant confirms deletion
+    with conn:
+        conn.execute("DELETE FROM chunks WHERE source_id=?", [source_id])
+        conn.execute("DELETE FROM sources WHERE id=?", [source_id])

@@ -86,13 +86,27 @@ def process_approved(conn) -> None:
             result = subprocess.run(
                 [sys.executable, str(script), str(path)],
                 stdout=subprocess.DEVNULL,
-                stderr=subprocess.DEVNULL,
+                stderr=subprocess.PIPE,
+                text=True,
                 cwd=str(Path(__file__).parent.parent),
             )
-            status = "done" if result.returncode == 0 else "failed"
+            if result.returncode == 0:
+                status = "done"
+            else:
+                status = "failed"
+                stderr_tail = result.stderr[-2000:] if result.stderr else ""
+                log.error(f"Ingestion subprocess failed for {path}:\n{stderr_tail}")
+                conn.execute(
+                    "INSERT INTO ingestion_errors (source_path, error, occurred_at) VALUES (?,?,?)",
+                    (str(path), stderr_tail, now_iso()),
+                )
         except Exception as exc:
             log.error(f"Failed to run ingest: {exc}")
             status = "failed"
+            conn.execute(
+                "INSERT INTO ingestion_errors (source_path, error, occurred_at) VALUES (?,?,?)",
+                (str(path), str(exc), now_iso()),
+            )
         conn.execute(
             "UPDATE quarantine SET status=?, ingested_at=? WHERE id=?",
             (status, now_iso(), row["id"])

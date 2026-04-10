@@ -63,6 +63,9 @@ def search(
     limit: int = config.SEARCH_TOP_K,
     offset: int = 0,
 ) -> list[dict]:
+    # Truncate query to embedding model's effective context
+    query = truncate_tokens(query, 512)  # 512 matches Matryoshka output dim
+
     qdrant = get_qdrant()
 
     # Embed query

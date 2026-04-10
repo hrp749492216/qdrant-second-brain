@@ -38,7 +38,7 @@ PARENT_WINDOW_MULT = 2.5
 
 # ── Search & ingestion ────────────────────────────────────────────────────────
 EMBED_BATCH_SIZE      = 32
-RERANK_CANDIDATES     = 50
+RERANK_CANDIDATES     = 100  # candidates for reranking; must be >= SEARCH_TOP_K * max_pages
 SEARCH_TOP_K          = 10
 OLLAMA_RETRY_ATTEMPTS = 3
 OLLAMA_RETRY_BACKOFF  = [1, 2, 4]
