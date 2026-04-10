@@ -29,3 +29,30 @@ def test_meta_keys():
     keys = {r[0] for r in conn.execute("SELECT key FROM meta").fetchall()}
     # meta is empty until init_schema populates it — table just needs to exist
     assert isinstance(keys, set)
+
+def test_meta_assertion_passes_on_match():
+    """init_schema should not raise when meta matches config."""
+    import config as _config
+    _config.SQLITE_PATH = ":memory:"
+    conn = get_connection()
+    init_tables(conn)
+    conn.execute("INSERT OR REPLACE INTO meta VALUES ('embedding_model', ?)", [_config.EMBEDDING_MODEL])
+    conn.execute("INSERT OR REPLACE INTO meta VALUES ('embedding_dim', ?)", [str(_config.EMBEDDING_DIM_STORED)])
+    conn.execute("INSERT OR REPLACE INTO meta VALUES ('schema_version', '1')")
+    conn.commit()
+    # Should not raise
+    from init_schema import assert_meta_matches
+    assert_meta_matches(conn)
+
+def test_meta_assertion_raises_on_mismatch():
+    import pytest
+    import config as _config
+    _config.SQLITE_PATH = ":memory:"
+    conn = get_connection()
+    init_tables(conn)
+    conn.execute("INSERT OR REPLACE INTO meta VALUES ('embedding_model', 'old-model')")
+    conn.execute("INSERT OR REPLACE INTO meta VALUES ('embedding_dim', '999')")
+    conn.commit()
+    from init_schema import assert_meta_matches
+    with pytest.raises(AssertionError):
+        assert_meta_matches(conn)
