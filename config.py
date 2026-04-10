@@ -11,10 +11,10 @@ EMBEDDING_DIM_FULL     = 2560
 EMBEDDING_DIM_STORED   = 512                          # Matryoshka truncation dim
 RERANKER_MODEL         = "BAAI/bge-reranker-v2-m3"
 RERANKER_DEVICE        = "mps"
-RERANKER_FP16          = True
+# RERANKER_FP16          = True  # declared but not consumed by CrossEncoder
 RERANK_MAX_CHUNK_TOKENS = 400   # bge-reranker max=512 total; 400 leaves room for query
 RERANK_BATCH_SIZE      = 16
-BM25_MODEL             = "Qdrant/bm25"
+# BM25_MODEL             = "Qdrant/bm25"  # unused — pure-Python sparse impl
 
 # ── Services ──────────────────────────────────────────────────────────────────
 OLLAMA_URL   = "http://localhost:11434"

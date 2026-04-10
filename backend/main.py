@@ -18,7 +18,7 @@ from backend.search import search as _search, warmup_reranker
 async def lifespan(app: FastAPI):
     # Warmup reranker on startup (hides JIT latency from first real query)
     print("[main] Warming up reranker...")
-    loop = asyncio.get_event_loop()
+    loop = asyncio.get_running_loop()
     await loop.run_in_executor(None, warmup_reranker)
     print("[main] Reranker ready.")
     yield
@@ -32,6 +32,10 @@ if _frontend.exists():
 
 # ── DB dependency ─────────────────────────────────────────────────────────────
 
+def get_db_conn() -> object:
+    """Return a raw connection (caller must close). Use inside executors."""
+    return get_connection()
+
 def get_db():
     conn = get_connection()
     try:
@@ -43,7 +47,7 @@ def get_db():
 
 @app.get("/search")
 async def search_endpoint(
-    q:           str            = Query(..., min_length=1),
+    query:       str            = Query(..., min_length=1),
     source_type: Optional[str]  = Query(None),
     platform:    Optional[str]  = Query(None),
     category:    Optional[str]  = Query(None),
@@ -51,22 +55,24 @@ async def search_endpoint(
     date_to:     Optional[str]  = Query(None),
     limit:       int            = Query(config.SEARCH_TOP_K, ge=1, le=50),
     offset:      int            = Query(0, ge=0),
-    conn=Depends(get_db),
 ):
-    loop = asyncio.get_event_loop()
-    results = await loop.run_in_executor(
-        None,
-        lambda: _search(q, conn, source_type=source_type, platform=platform,
-                        category=category, date_from=date_from, date_to=date_to,
-                        limit=limit, offset=offset)
-    )
+    loop = asyncio.get_running_loop()
+    def _run():
+        conn = get_db_conn()
+        try:
+            return _search(query, conn, source_type=source_type, platform=platform,
+                           category=category, date_from=date_from, date_to=date_to,
+                           limit=limit, offset=offset)
+        finally:
+            conn.close()
+    results = await loop.run_in_executor(None, _run)
     return {"results": results, "count": len(results)}
 
 
 @app.get("/status")
 def status_endpoint(conn=Depends(get_db)):
-    from qdrant_client import QdrantClient
-    qdrant = QdrantClient(url=config.QDRANT_URL)
+    from backend.search import get_qdrant
+    qdrant = get_qdrant()
     info = qdrant.get_collection(config.QDRANT_COLLECTION)
     total_chunks  = conn.execute("SELECT COUNT(*) FROM chunks").fetchone()[0]
     total_sources = conn.execute("SELECT COUNT(*) FROM sources").fetchone()[0]

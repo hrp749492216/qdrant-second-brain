@@ -81,7 +81,6 @@ def init_tables(conn: sqlite3.Connection) -> None:
 import uuid as _uuid
 import hashlib
 import datetime
-import config as _config
 
 
 def now_iso() -> str:
@@ -96,7 +95,7 @@ def sha256_normalize(text: str) -> str:
 
 
 def make_point_id(source_id: int, chunk_index: int) -> str:
-    return str(_uuid.uuid5(_config.NAMESPACE_BRAIN, f"{source_id}:{chunk_index}"))
+    return str(_uuid.uuid5(config.NAMESPACE_BRAIN, f"{source_id}:{chunk_index}"))
 
 
 def get_or_create_source(conn, path: str, source_type: str,
@@ -147,7 +146,7 @@ def upsert_chunk(conn, source_id: int, chunk_index: int,
               embedding_model_version=excluded.embedding_model_version,
               qdrant_point_id=excluded.qdrant_point_id
         """, [source_id, point_id, chunk_index, chunk_text, parent_text,
-              content_hash, _config.EMBEDDING_MODEL])
+              content_hash, config.EMBEDDING_MODEL])
 
         sqlite_chunk_id = conn.execute(
             "SELECT id FROM chunks WHERE source_id=? AND chunk_index=?",
@@ -158,7 +157,7 @@ def upsert_chunk(conn, source_id: int, chunk_index: int,
         src = conn.execute("SELECT * FROM sources WHERE id=?", [source_id]).fetchone()
 
         qdrant_client.upsert(
-            collection_name=_config.QDRANT_COLLECTION,
+            collection_name=config.QDRANT_COLLECTION,
             points=[PointStruct(
                 id=point_id,
                 vector={"dense": dense_vec, "sparse": sparse_vec},
@@ -186,7 +185,7 @@ def delete_source(conn, source_id: int, qdrant_client) -> None:
                               [source_id]).fetchall()]
     if point_ids:
         qdrant_client.delete(
-            collection_name=_config.QDRANT_COLLECTION,
+            collection_name=config.QDRANT_COLLECTION,
             points_selector=PointIdsList(points=point_ids),
         )
     conn.execute("DELETE FROM sources WHERE id=?", [source_id])
