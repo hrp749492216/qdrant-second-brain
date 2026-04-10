@@ -76,3 +76,118 @@ def get_connection(path: Optional[str] = None) -> sqlite3.Connection:
 def init_tables(conn: sqlite3.Connection) -> None:
     conn.executescript(_DDL)
     conn.commit()
+
+
+import uuid as _uuid
+import hashlib
+import datetime
+import config as _config
+
+
+def now_iso() -> str:
+    return datetime.datetime.now(datetime.timezone.utc).isoformat()
+
+
+def sha256_normalize(text: str) -> str:
+    """Whitespace-normalize (no lowercase) and SHA-256 hash."""
+    import re
+    normalized = re.sub(r'\s+', ' ', text.strip())
+    return hashlib.sha256(normalized.encode()).hexdigest()
+
+
+def make_point_id(source_id: int, chunk_index: int) -> str:
+    return str(_uuid.uuid5(_config.NAMESPACE_BRAIN, f"{source_id}:{chunk_index}"))
+
+
+def get_or_create_source(conn, path: str, source_type: str,
+                          platform: str = "local", title: str = "",
+                          date: str = "1970-01-01T00:00:00Z",
+                          file_hash: str = "",
+                          category: str = "") -> int:
+    row = conn.execute("SELECT id FROM sources WHERE path = ?", [path]).fetchone()
+    if row:
+        return row["id"]
+    conn.execute(
+        "INSERT INTO sources (path, source_type, platform, title, date, ingested_at, file_hash, category) "
+        "VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
+        [path, source_type, platform, title, date, now_iso(), file_hash, category],
+    )
+    conn.commit()
+    return conn.execute("SELECT id FROM sources WHERE path = ?", [path]).fetchone()["id"]
+
+
+def upsert_chunk(conn, source_id: int, chunk_index: int,
+                 chunk_text: str, parent_text: str,
+                 dense_vec: list, sparse_vec,
+                 qdrant_client) -> None:
+    """Two-phase write: SQLite first (in transaction), then Qdrant."""
+    from qdrant_client.models import PointStruct
+    content_hash = sha256_normalize(chunk_text)
+    point_id     = make_point_id(source_id, chunk_index)
+
+    # Check if unchanged
+    existing = conn.execute(
+        "SELECT content_hash FROM chunks WHERE source_id=? AND chunk_index=?",
+        [source_id, chunk_index]
+    ).fetchone()
+    if existing and existing["content_hash"] == content_hash:
+        return  # no change
+
+    # SQLite write + Qdrant upsert in one transaction window
+    with conn:
+        conn.execute("""
+            INSERT INTO chunks
+              (source_id, qdrant_point_id, chunk_index, chunk_text, parent_text,
+               content_hash, embedding_model_version)
+            VALUES (?, ?, ?, ?, ?, ?, ?)
+            ON CONFLICT(source_id, chunk_index) DO UPDATE SET
+              chunk_text=excluded.chunk_text,
+              parent_text=excluded.parent_text,
+              content_hash=excluded.content_hash,
+              embedding_model_version=excluded.embedding_model_version,
+              qdrant_point_id=excluded.qdrant_point_id
+        """, [source_id, point_id, chunk_index, chunk_text, parent_text,
+              content_hash, _config.EMBEDDING_MODEL])
+
+        sqlite_chunk_id = conn.execute(
+            "SELECT id FROM chunks WHERE source_id=? AND chunk_index=?",
+            [source_id, chunk_index]
+        ).fetchone()["id"]
+
+        # Get source metadata for payload
+        src = conn.execute("SELECT * FROM sources WHERE id=?", [source_id]).fetchone()
+
+        qdrant_client.upsert(
+            collection_name=_config.QDRANT_COLLECTION,
+            points=[PointStruct(
+                id=point_id,
+                vector={"dense": dense_vec, "sparse": sparse_vec},
+                payload={
+                    "source_type":     src["source_type"],
+                    "platform":        src["platform"],
+                    "category":        src["category"],
+                    "title":           src["title"],
+                    "date":            src["date"],
+                    "source_path":     src["path"],
+                    "chunk_index":     chunk_index,
+                    "content_hash":    content_hash,
+                    "source_id":       source_id,
+                    "sqlite_chunk_id": sqlite_chunk_id,
+                }
+            )]
+        )
+
+
+def delete_source(conn, source_id: int, qdrant_client) -> None:
+    """Delete all chunks for a source from Qdrant and SQLite."""
+    from qdrant_client.models import PointIdsList
+    point_ids = [r["qdrant_point_id"] for r in
+                 conn.execute("SELECT qdrant_point_id FROM chunks WHERE source_id=?",
+                              [source_id]).fetchall()]
+    if point_ids:
+        qdrant_client.delete(
+            collection_name=_config.QDRANT_COLLECTION,
+            points_selector=PointIdsList(points=point_ids),
+        )
+    conn.execute("DELETE FROM sources WHERE id=?", [source_id])
+    conn.commit()

@@ -56,3 +56,24 @@ def test_meta_assertion_raises_on_mismatch():
     from init_schema import assert_meta_matches
     with pytest.raises(AssertionError):
         assert_meta_matches(conn)
+
+
+def test_upsert_and_hash():
+    import sys, pathlib; sys.path.insert(0, str(pathlib.Path(__file__).parent.parent))
+    from backend.db import get_connection, init_tables, sha256_normalize, make_point_id
+    import config
+    config.SQLITE_PATH = ":memory:"
+    conn = get_connection()
+    init_tables(conn)
+    h1 = sha256_normalize("Hello World")
+    h2 = sha256_normalize("Hello  World")   # extra space — should normalize same
+    assert h1 == h2
+    # case preserved
+    h3 = sha256_normalize("foo()")
+    h4 = sha256_normalize("FOO()")
+    assert h3 != h4
+
+def test_make_point_id_deterministic():
+    from backend.db import make_point_id
+    assert make_point_id(1, 0) == make_point_id(1, 0)
+    assert make_point_id(1, 0) != make_point_id(1, 1)
