@@ -25,7 +25,7 @@ export default function App() {
     setLoading(true);
     setError(null);
     try {
-      const params = new URLSearchParams({ q, limit: String(PAGE_SIZE), offset: String(off) });
+      const params = new URLSearchParams({ query: q, limit: String(PAGE_SIZE), offset: String(off) });
       if (filters.source_type) params.set("source_type", filters.source_type);
       if (filters.platform)    params.set("platform",    filters.platform);
       if (filters.category)    params.set("category",    filters.category);
@@ -40,8 +40,8 @@ export default function App() {
       setHasMore(data.results.length === PAGE_SIZE);
       setOffset(off + data.results.length);
       setSearched(true);
-    } catch (e: any) {
-      setError(e.message);
+    } catch (e) {
+      setError(e instanceof Error ? e.message : String(e));
     } finally {
       setLoading(false);
     }

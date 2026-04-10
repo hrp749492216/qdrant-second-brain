@@ -68,7 +68,7 @@ export function ResultsList({ results, loading, error, searched, onLoadMore, has
 
   return (
     <div>
-      {results.map((r, i) => <ResultCard key={i} result={r} />)}
+      {results.map((r) => <ResultCard key={`${r.source_path}-${r.chunk_text.slice(0, 20)}`} result={r} />)}
       {hasMore && (
         <button onClick={onLoadMore}
           style={{ display: "block", margin: "0 auto", padding: "10px 24px",

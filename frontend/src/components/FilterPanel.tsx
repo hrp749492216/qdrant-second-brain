@@ -42,14 +42,14 @@ export function FilterPanel({ filters, onChange }: Props) {
 
       <label style={{ fontSize: 13 }}>
         From date
-        <input type="date" value={filters.date_from}
+        <input type="date" value={filters.date_from ? filters.date_from.slice(0, 10) : ""}
           onChange={e => set("date_from", e.target.value ? e.target.value + "T00:00:00Z" : "")}
           style={{ display: "block", marginTop: 4, width: "100%", padding: "6px 8px" }} />
       </label>
 
       <label style={{ fontSize: 13 }}>
         To date
-        <input type="date" value={filters.date_to}
+        <input type="date" value={filters.date_to ? filters.date_to.slice(0, 10) : ""}
           onChange={e => set("date_to", e.target.value ? e.target.value + "T23:59:59Z" : "")}
           style={{ display: "block", marginTop: 4, width: "100%", padding: "6px 8px" }} />
       </label>
