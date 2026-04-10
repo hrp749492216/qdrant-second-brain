@@ -22,17 +22,15 @@ def get_qdrant() -> QdrantClient:
 def get_reranker():
     global _reranker
     if _reranker is None:
-        from FlagEmbedding import FlagReranker
-        _reranker = FlagReranker(
-            config.RERANKER_MODEL,
-            use_fp16=config.RERANKER_FP16,
-            device=config.RERANKER_DEVICE,
-        )
+        # FlagEmbedding.FlagReranker broken on Python 3.14 (is_torch_fx_available removed).
+        # sentence-transformers CrossEncoder provides identical bge-reranker-v2-m3 support.
+        from sentence_transformers import CrossEncoder
+        _reranker = CrossEncoder(config.RERANKER_MODEL, device=config.RERANKER_DEVICE)
     return _reranker
 
 def warmup_reranker():
     r = get_reranker()
-    r.compute_score([["warmup", "warmup"]], normalize=True)
+    r.predict([["warmup", "warmup"]], apply_softmax=True)
 
 # ── Filter builder ─────────────────────────────────────────────────────────────
 
@@ -124,7 +122,7 @@ def search(
         for c in candidates
     ]
     with _reranker_lock:
-        scores = reranker.compute_score(pairs, normalize=True, batch_size=config.RERANK_BATCH_SIZE)
+        scores = reranker.predict(pairs, apply_softmax=True, batch_size=config.RERANK_BATCH_SIZE)
     for c, s in zip(candidates, scores):
         c["rerank_score"] = float(s)
 
