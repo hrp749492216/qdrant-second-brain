@@ -1,0 +1,12 @@
+{
+  "conversations": [
+    {
+      "id": "cccccccc-0001-0001-0001-000000000001",
+      "title": "Gemini Test",
+      "reply": [
+        {"author": "user", "text": "What is Gemini?", "timestamp": "2026-01-01T10:00:00Z"},
+        {"author": "model", "text": "Gemini is Google's multimodal AI model.", "timestamp": "2026-01-01T10:00:01Z"}
+      ]
+    }
+  ]
+}

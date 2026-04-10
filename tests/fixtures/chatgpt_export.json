@@ -1,0 +1,11 @@
+[
+  {
+    "conversation_id": "bbbbbbbb-0001-0001-0001-000000000001",
+    "title": "ChatGPT Test",
+    "create_time": 1735725600.0,
+    "mapping": {
+      "node-1": {"message": {"author": {"role": "user"}, "content": {"parts": ["What is GPT?"]}, "create_time": 1735725600.0}, "children": ["node-2"]},
+      "node-2": {"message": {"author": {"role": "assistant"}, "content": {"parts": ["GPT stands for Generative Pre-trained Transformer."]}, "create_time": 1735725601.0}, "children": []}
+    }
+  }
+]
